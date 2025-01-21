@@ -26,7 +26,7 @@ class Settings(BaseModel):
     snowflake_region: str = "west-us-2.azure"
     
     # Collector Configuration
-    batch_size: int = 32
+    batch_size: int = 100
     batch_timeout: int = 10
     num_threads: int = 25
     max_retries: int = 3

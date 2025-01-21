@@ -72,11 +72,10 @@ class QueueManager(LoggerMixin):
     @with_retry(max_attempts=3)
     async def receive_messages(
         self,
-        max_messages: int = 32,
+        max_messages: int = 1000,
         visibility_timeout: int = 300
     ) -> List[Tuple[CollectorMessage, QueueMessage]]:
         try:
-            self.log_info(f"Receiving up to {max_messages} messages")
             
             # Get messages from queue with debug info
             messages = self.queue_client.receive_messages(
