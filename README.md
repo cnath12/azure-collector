@@ -73,7 +73,7 @@ flowchart TB
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/your-org/azure-collector.git
+git clone https://github.com/cnath12/azure-collector.git
 cd azure-collector
 ```
 
@@ -113,7 +113,7 @@ SNOWFLAKE_USER=your-user
 SNOWFLAKE_PASSWORD=your-password
 
 # Collector Configuration
-BATCH_SIZE=1000
+BATCH_SIZE=32
 BATCH_TIMEOUT=10
 NUM_THREADS=25
 MAX_RETRIES=3
@@ -229,21 +229,12 @@ pytest
 
 Common issues and solutions:
 
-1. Connection Issues
-```bash
-# Test Azure connection
-azure-collector test-connection
-
-# Test Snowflake connection
-azure-collector test-snowflake
-```
-
-2. Permission Issues
+1. Permission Issues
 - Verify Azure role assignments
 - Check Snowflake grants
 - Validate Key Vault access
 
-3. Performance Issues
+2. Performance Issues
 - Adjust BATCH_SIZE
 - Modify NUM_THREADS
 - Check Snowflake warehouse size
