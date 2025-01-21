@@ -153,12 +153,13 @@ class SnowflakeManager(LoggerMixin):
         if not results:
             return
 
-        # Ensure initialization
-        if not self._is_initialized:
-            await self.initialize()
-
         try:
             self.log_info(f"Writing batch of {len(results)} results to Snowflake")
+            
+             # Ensure initialization
+            if not self._is_initialized:
+                await self.initialize()
+            
             cursor = self._get_cursor()
             
             try:
@@ -182,7 +183,7 @@ class SnowflakeManager(LoggerMixin):
                             message_id=result.get('message_id'),
                             data_sample=str(result.get('data'))[:200]
                         )
-                        raise
+                        continue
 
                 cursor.executemany(
                     """

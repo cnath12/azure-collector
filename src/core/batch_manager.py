@@ -102,7 +102,7 @@ class BatchManager(LoggerMixin):
         while not self._stop_event.is_set():
             try:
                 await asyncio.sleep(self.settings.batch_timeout)
-                if not self._stop_event.is_set() and await self._should_flush():
+                if not self._stop_event.is_set() and self.current_batch:
                     await self.flush()
             except Exception as e:
                 self.log_error("Error in periodic flush", error=e)
