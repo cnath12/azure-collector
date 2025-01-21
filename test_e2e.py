@@ -209,7 +209,7 @@ async def main():
             print("Collector failed. Aborting test.")
             return
         
-        await asyncio.sleep(7)
+        await asyncio.sleep(12)
         
         if not await test.verify_data_in_snowflake(message_id):
             print("Failed to verify data in Snowflake. Test failed.")
