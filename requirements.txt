@@ -1,0 +1,39 @@
+# Azure SDK dependencies
+azure-identity>=1.12.0
+azure-mgmt-compute>=30.3.0
+azure-mgmt-network>=25.1.0
+azure-mgmt-storage>=21.1.0
+azure-mgmt-resource>=23.0.1
+azure-mgmt-security>=5.0.0
+azure-mgmt-monitor>=6.0.2
+azure-mgmt-core>=1.4.0
+azure-storage-queue>=12.8.0
+azure-keyvault-secrets>=4.7.0
+
+# Database
+snowflake-connector-python>=3.0.0
+
+# Utilities and Core dependencies
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+structlog>=24.1.0
+backoff>=2.2.0
+tenacity>=8.2.0
+
+# Type checking and development tools
+mypy>=1.8.0
+types-python-dateutil>=2.8.19.14
+pytest-mypy>=0.10.3
+
+# Testing
+pytest>=8.0.0
+pytest-asyncio>=0.23.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+
+# Code quality
+black>=23.12.1
+isort>=5.13.2
+flake8>=7.0.0
+
+requests>=2.31.0
