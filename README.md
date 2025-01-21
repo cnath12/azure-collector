@@ -2,6 +2,50 @@
 
 A collector service that gathers Azure cloud configuration data by making Azure API calls and stores the data in Snowflake.
 
+## Architecture
+
+```mermaid
+flowchart TB
+    subgraph Azure["Azure Cloud"]
+        Queue[("Azure Queue Storage")]
+        KV["Azure Key Vault"]
+        API["Azure REST APIs"]
+    end
+
+    subgraph Collector["Azure Cloud Collector"]
+        QM["Queue Manager"]
+        AM["Auth Manager"]
+        Client["Azure Client"]
+        BM["Batch Manager"]
+        SF["Snowflake Manager"]
+        MP["Message Processor"]
+        
+        QM --> |"Fetch Messages"| MP
+        MP --> |"Process Message"| Client
+        Client --> |"Make API Calls"| MP
+        MP --> |"Add Results"| BM
+        BM --> |"Write Batch"| SF
+        AM --> |"Get Credentials"| Client
+        AM --> |"Get Tokens"| KV
+    end
+
+    subgraph Storage["Data Storage"]
+        Snowflake[("Snowflake DB")]
+    end
+
+    Queue --> |"Messages"| QM
+    Client --> |"API Requests"| API
+    SF --> |"Write Data"| Snowflake
+
+    classDef azure fill:#0072C6,color:white;
+    classDef collector fill:#00A36C,color:white;
+    classDef storage fill:#1B365D,color:white;
+    
+    class Queue,KV,API azure;
+    class QM,AM,Client,BM,SF,MP collector;
+    class Snowflake storage;
+```
+
 ## Features
 
 - Collects Azure configuration data using Azure SDK
@@ -153,7 +197,7 @@ Messages should be sent to the Azure Queue in the following format:
 # Run an end to end test with all functionalities
 python3 test_e2e.py
 
-# Run all tests
+# Run all unit tests
 pytest
 
 ```
