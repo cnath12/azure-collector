@@ -69,14 +69,13 @@ class AzureClient(LoggerMixin):
         self.auth_manager = AzureAuthManager()
         self._client_factory: Optional[AzureClientFactory] = None
 
-    async def _get_headers(self) -> Dict[str, str]:
+    def _get_headers(self) -> Dict[str, str]:
         """Get authentication headers for API calls"""
-        token = await self.auth_manager.get_token("https://management.azure.com/.default")
+        token = self.auth_manager.get_token("https://management.azure.com/.default")
         return {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json"
         }
-
     
     def _build_url(self, request: APIRequest) -> str:
         """Build full API URL from request."""
@@ -99,11 +98,10 @@ class AzureClient(LoggerMixin):
         query_string = "&".join(f"{k}={v}" for k, v in query_params.items())
         return f"{base_url}{path}?{query_string}"
 
-    
-    async def _get_client_factory(self) -> AzureClientFactory:
+    def _get_client_factory(self) -> AzureClientFactory:
         """Lazy initialization of client factory"""
         if self._client_factory is None:
-            credentials = await self.auth_manager.get_credentials()
+            credentials = self.auth_manager.get_credentials()
             self._client_factory = AzureClientFactory(
                 credential=self.auth_manager.credential,
                 subscription_id=credentials['subscription_id']
@@ -127,14 +125,13 @@ class AzureClient(LoggerMixin):
         return method_func
 
     @with_retry(max_attempts=3, exception_types=(AzureError,))
-    async def execute_api_calls(self, message: CollectorMessage) -> CollectorResponse:
+    def execute_api_calls(self, message: CollectorMessage) -> CollectorResponse:
         """Execute Azure API calls using HTTP requests"""
         results = []
         errors = []
         
         try:
-            headers = await self._get_headers()
-            any_success = False
+            headers = self._get_headers()
             
             for request in message.api_requests:
                 try:
@@ -163,7 +160,6 @@ class AzureClient(LoggerMixin):
                     result = response.json()
                     results.append(result)
                     errors.append(None)
-                    any_success = True
                     
                 except Exception as e:
                     self.log_error(
@@ -172,15 +168,15 @@ class AzureClient(LoggerMixin):
                         service=request.service,
                         method=request.method
                     )
-                    results.append({})
                     errors.append(str(e))
             
+            # Create response with the correct structure
             return CollectorResponse(
                 message_id=message.message_id,
                 correlation_id=message.correlation_id,
                 status="success" if all(e is None for e in errors) else "partial_failure",
-                data=[r for r in results if r],  # Only include successful results
-                errors=[e for e in errors if e],    # Only include actual errors
+                data=results,  # This matches the expected field name
+                errors=[e for e in errors if e is not None],
                 timestamp=datetime.now(UTC)
             )
             
@@ -190,7 +186,7 @@ class AzureClient(LoggerMixin):
                 message_id=message.message_id,
                 correlation_id=message.correlation_id,
                 status="error",
-                data=[],
+                data=[],  # Empty list for data on error
                 errors=[str(e)],
                 timestamp=datetime.now(UTC)
             )
@@ -212,24 +208,6 @@ class AzureClient(LoggerMixin):
                     return service_name, method_name
         
         raise ValueError(f"Invalid resource path: {resource_path}")
-
-    # def _parse_resource_path(self, resource_path: str) -> tuple[str, str]:
-    #     """Parse resource path into service and method components"""
-    #     parts = [p.lower() for p in resource_path.split('/') if p]
-        
-    #     # Check for resource groups
-    #     if 'resourcegroups' in parts:
-    #         return 'resource_groups', 'list'
-            
-    #     # Find Microsoft.* service
-    #     for i, part in enumerate(parts):
-    #         if part.startswith('microsoft.'):
-    #             service_name = part.split('.')[1]
-    #             if i + 1 < len(parts):
-    #                 method_name = parts[i + 1]
-    #                 return service_name, method_name
-        
-    #     raise ValueError(f"Invalid resource path: {resource_path}")
 
     def _process_response(self, response: Any) -> Dict[str, Any]:
         """Process API response into a dictionary"""

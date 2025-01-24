@@ -86,7 +86,7 @@ source venv/bin/activate  # Linux/macOS
 
 3. Install dependencies:
 ```bash
-pip install -e .
+pip install -r requirements.txt
 ```
 
 ## Configuration

@@ -1,6 +1,8 @@
-import asyncio
-from typing import Optional, AsyncGenerator
+import threading
+import time
+from typing import Optional
 from datetime import datetime, UTC
+from concurrent.futures import ThreadPoolExecutor
 
 from src.config.logging_config import LoggerMixin
 from src.storage.queue import QueueManager
@@ -9,6 +11,7 @@ from src.core.batch_manager import BatchManager
 from src.config.settings import get_settings
 from src.utils.validation import CollectionResult
 from src.azure.client import AzureClient
+
 class Collector(LoggerMixin):
     """Main collector class orchestrating the collection process"""
     
@@ -19,61 +22,78 @@ class Collector(LoggerMixin):
         self.message_processor = MessageProcessor()
         self.batch_manager = BatchManager()
         self.azure_client = AzureClient()
-        self._stop_event = asyncio.Event()
-        # self._periodic_flush_task: Optional[asyncio.Task] = None
+        self._stop_event = threading.Event()
+        self.thread_pool = ThreadPoolExecutor(max_workers=self.settings.num_threads)
 
-    async def start(self) -> None:
+    def start(self) -> None:
         """Start the collector"""
         self.log_info("Starting collector")
         
         try:
+            # Start periodic flush in a separate thread
+            self.batch_manager.start_periodic_flush()
+            
             # Process messages until stopped
-            await self.process_messages()
+            self.process_messages()
                 
         except Exception as e:
             self.log_error("Fatal error in collector", error=e)
             raise
         finally:
-            await self.shutdown()
+            self.shutdown()
 
-    async def process_messages(self) -> None:
+    def process_messages(self) -> None:
         """Process messages from the queue"""
         while not self._stop_event.is_set():
             try:
-                messages = await self.queue_manager.receive_messages(max_messages=32)
+                messages = self.queue_manager.receive_messages(max_messages=32)
                 
                 if not messages:
-                    await asyncio.sleep(1)
+                    time.sleep(5)
                     continue
 
                 self.log_info(f"Processing batch of {len(messages)} messages")
+                
+                # Process messages using thread pool
+                futures = []
                 for message, raw_msg in messages:
+                    future = self.thread_pool.submit(
+                        self.message_processor.process_message,
+                        message,
+                        raw_msg
+                    )
+                    futures.append((future, raw_msg))
+
+                # Collect results
+                results = []
+                for (future, raw_msg) in futures:
                     try:
-                        # Execute Azure API calls
-                        result = await self.azure_client.execute_api_calls(message)
-                        
-                        # Add to batch manager
-                        await self.batch_manager.add_to_batch([(result, raw_msg)])
-                        
-                        self.log_info(f"Successfully processed message {message.message_id}")
+                        result = future.result()
+                        if result:
+                            results.append((result, raw_msg))
                     except Exception as e:
-                        self.log_error(f"Failed to process message {message.message_id}", error=e)
-                        
-                # Force flush after batch processing
-                await self.batch_manager.flush()
+                        self.log_error("Failed to process message", error=e)
+
+                # Add to batch manager
+                if results:
+                    self.batch_manager.add_to_batch(results)
+                    self.batch_manager.flush()
                     
             except Exception as e:
                 self.log_error("Error in message processing loop", error=e)
-                await asyncio.sleep(1)
+                time.sleep(1)
 
-    async def shutdown(self) -> None:
+    def shutdown(self) -> None:
         """Shutdown the collector gracefully"""
         self.log_info("Shutting down collector")
         self._stop_event.set()
         
+        # Shutdown thread pool
+        self.thread_pool.shutdown(wait=True)
+        
         # Final flush
         try:
-            await self.batch_manager.flush()
+            self.batch_manager.flush()
         except Exception as e:
             self.log_error("Error during final flush", error=e)
         

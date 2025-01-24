@@ -1,4 +1,4 @@
-from azure.identity.aio import DefaultAzureCredential
+from azure.identity import DefaultAzureCredential  # Changed from .aio version
 from azure.keyvault.secrets import SecretClient
 from typing import Optional, Dict, Any
 import json
@@ -40,7 +40,7 @@ class AzureAuthManager(LoggerMixin):
         return self._secret_client
 
     @with_retry(max_attempts=3, exception_types=(Exception,))
-    async def get_secret(self, secret_name: str) -> str:
+    def get_secret(self, secret_name: str) -> str:
         """
         Retrieve a secret from Azure Key Vault
         
@@ -66,7 +66,7 @@ class AzureAuthManager(LoggerMixin):
             raise
 
     @with_retry(max_attempts=3, exception_types=(Exception,))
-    async def get_credentials(self, force_refresh: bool = False) -> Dict[str, str]:
+    def get_credentials(self, force_refresh: bool = False) -> Dict[str, str]:
         """
         Retrieve Azure credentials from Key Vault
         
@@ -87,7 +87,7 @@ class AzureAuthManager(LoggerMixin):
                     return self._cached_credentials
 
             self.log_info("Retrieving Azure credentials")
-            creds_json = await self.get_secret("azure-collector-creds")
+            creds_json = self.get_secret("azure-collector-creds")
             
             # Parse and validate credentials
             credentials = json.loads(creds_json)
@@ -108,7 +108,7 @@ class AzureAuthManager(LoggerMixin):
             self.log_error("Failed to retrieve Azure credentials", error=e)
             raise
 
-    async def refresh_credentials(self) -> None:
+    def refresh_credentials(self) -> None:
         """
         Refresh Azure credentials
         
@@ -122,7 +122,7 @@ class AzureAuthManager(LoggerMixin):
             self._credential = DefaultAzureCredential()
             
             # Force credential refresh
-            await self.get_credentials(force_refresh=True)
+            self.get_credentials(force_refresh=True)
             
             self.log_info(
                 "Successfully refreshed Azure credentials",
@@ -133,7 +133,7 @@ class AzureAuthManager(LoggerMixin):
             self.log_error("Failed to refresh Azure credentials", error=e)
             raise
 
-    async def validate_credentials(self) -> bool:
+    def validate_credentials(self) -> bool:
         """
         Validate current credentials are working
         
@@ -142,7 +142,7 @@ class AzureAuthManager(LoggerMixin):
         """
         try:
             # Try to get credentials
-            credentials = await self.get_credentials()
+            credentials = self.get_credentials()
             
             # Try to use credentials
             self.secret_client.get_secret("test-secret-name")
@@ -152,7 +152,7 @@ class AzureAuthManager(LoggerMixin):
             self.log_error("Credential validation failed", error=e)
             return False
         
-    async def get_token(self, scope: str) -> str:
+    def get_token(self, scope: str) -> str:
         """Get an authentication token for the given scope"""
-        token = await self.credential.get_token(scope)
+        token = self.credential.get_token(scope)
         return token.token

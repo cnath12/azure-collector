@@ -1,4 +1,5 @@
 import snowflake.connector
+import threading
 from snowflake.connector.connection import SnowflakeConnection
 from snowflake.connector.cursor import SnowflakeCursor
 from typing import List, Dict, Any, Optional
@@ -17,12 +18,13 @@ class SnowflakeManager(LoggerMixin):
         self.settings = get_settings()
         self._connection: Optional[SnowflakeConnection] = None
         self._is_initialized: bool = False
+        self._connection_lock = threading.Lock()
 
     def _create_connection(self) -> SnowflakeConnection:
         """Create initial connection to Snowflake without any context"""
         self.log_info("Creating base Snowflake connection")
         return snowflake.connector.connect(
-            account=f"{self.settings.snowflake_account.split('.')[0]}.west-us-2.azure",
+            account=self.settings.snowflake_account,
             user=self.settings.snowflake_user,
             password=self.settings.snowflake_password
         )
@@ -30,14 +32,15 @@ class SnowflakeManager(LoggerMixin):
     @property
     def connection(self) -> SnowflakeConnection:
         """Get the Snowflake connection, ensuring it's initialized"""
-        if not self._is_initialized:
-            raise RuntimeError("Must call initialize() before using connection")
-            
-        if self._connection is None or self._connection.is_closed():
-            self._is_initialized = False
-            raise RuntimeError("Connection lost - must reinitialize")
-            
-        return self._connection
+        with self._connection_lock:
+            if not self._is_initialized:
+                raise RuntimeError("Must call initialize() before using connection")
+                
+            if self._connection is None or self._connection.is_closed():
+                self._is_initialized = False
+                raise RuntimeError("Connection lost - must reinitialize")
+                
+            return self._connection
 
     def _get_cursor(self) -> SnowflakeCursor:
         """Get a Snowflake cursor from initialized connection"""
@@ -102,30 +105,31 @@ class SnowflakeManager(LoggerMixin):
             self.log_error("Failed to create Snowflake objects", error=e)
             raise
 
-    async def initialize(self) -> None:
+    def initialize(self) -> None:
         """Initialize Snowflake connection in correct sequence"""
-        if self._is_initialized:
-            return
+        with self._connection_lock:
+            if self._is_initialized:
+                return
 
-        try:
-            self.log_info("Starting Snowflake initialization")
-            self._connection = self._create_connection()
-            
-            cursor = self._connection.cursor()
             try:
-                self._validate_and_create_objects(cursor)
-                self._is_initialized = True
-                self.log_info("Snowflake initialization complete")
-            finally:
-                cursor.close()
+                self.log_info("Starting Snowflake initialization")
+                self._connection = self._create_connection()
                 
-        except Exception as e:
-            self.log_error("Failed to initialize Snowflake", error=e)
-            if self._connection:
-                self._connection.close()
-                self._connection = None
-            self._is_initialized = False
-            raise
+                cursor = self._connection.cursor()
+                try:
+                    self._validate_and_create_objects(cursor)
+                    self._is_initialized = True
+                    self.log_info("Snowflake initialization complete")
+                finally:
+                    cursor.close()
+                    
+            except Exception as e:
+                self.log_error("Failed to initialize Snowflake", error=e)
+                if self._connection:
+                    self._connection.close()
+                    self._connection = None
+                self._is_initialized = False
+                raise
 
     def _safe_serialize(self, obj: Any) -> Optional[str]:
         """Safely serialize data, handling special cases and Azure response types"""
@@ -148,7 +152,7 @@ class SnowflakeManager(LoggerMixin):
             return json.dumps(str(obj))
 
     @with_retry(max_attempts=3)
-    async def write_batch(self, results: List[Dict[str, Any]]) -> None:
+    def write_batch(self, results: List[Dict[str, Any]]) -> None:
         """Write a batch of results to Snowflake"""
         if not results:
             return
@@ -156,9 +160,9 @@ class SnowflakeManager(LoggerMixin):
         try:
             self.log_info(f"Writing batch of {len(results)} results to Snowflake")
             
-             # Ensure initialization
+            # Ensure initialization
             if not self._is_initialized:
-                await self.initialize()
+                self.initialize()
             
             cursor = self._get_cursor()
             
@@ -210,14 +214,15 @@ class SnowflakeManager(LoggerMixin):
                 )
             raise
 
-    async def close(self) -> None:
+    def close(self) -> None:
         """Close the Snowflake connection"""
-        try:
-            if self._connection and not self._connection.is_closed():
-                self._connection.close()
-                self._connection = None
-            self._is_initialized = False
-            self.log_info("Closed Snowflake connections")
-        except Exception as e:
-            self.log_error("Error closing Snowflake connections", error=e)
-            raise
+        with self._connection_lock:
+            try:
+                if self._connection and not self._connection.is_closed():
+                    self._connection.close()
+                    self._connection = None
+                self._is_initialized = False
+                self.log_info("Closed Snowflake connections")
+            except Exception as e:
+                self.log_error("Error closing Snowflake connections", error=e)
+                raise
